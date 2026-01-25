@@ -18,15 +18,6 @@
     *   **产出:** 所有依赖安装完成，`app/generated/` 目录下出现 `vault` 客户端代码，项目可以无误地启动。
     *   **Commit Message:** `chore: 安装项目依赖并生成初始客户端`
 
-*   **任务 0.3: 项目重命名 (Vault -> Artifex)**
-    *   **操作:**
-        1.  将 `anchor/programs/vault` 文件夹重命名为 `anchor/programs/artifex`。
-        2.  修改 `Anchor.toml` 文件，将 `[programs.localnet]` 和 `[programs.devnet]` 下的 `vault` 改为 `artifex`。
-        3.  修改 `codama.json` 文件，将 `"programName": "vault"` 改为 `"programName": "artifex"`。
-        4.  在 `finalProject` 根目录运行 `npm run setup`，重新生成客户端。
-    *   **产出:** `app/generated/` 目录下的 `vault` 文件夹变为 `artifex`，整个项目从模板名切换为我们自己的项目名。
-    *   **Commit Message:** `refactor: 重命名项目，从 Vault 切换至 Artifex`
-
 ---
 
 ## 阶段 1: 链上程序核心功能开发
@@ -35,7 +26,7 @@
 
 *   **任务 1.1: 实现基础NFT铸造指令 (`mint_base_nft`)**
     *   **操作:**
-        1.  在 `anchor/programs/artifex/src/lib.rs` 中，定义 `mint_base_nft` 指令的上下文和处理函数。
+        1.  在 `anchor/programs/vault/src/lib.rs` 中，定义 `mint_base_nft` 指令的上下文和处理函数。
         2.  实现通过CPI调用Metaplex Token Metadata程序来创建和铸造一个新NFT的逻辑。URI可以暂时使用一个占位符字符串。
     *   **产出:** 在 `anchor` 目录下运行 `anchor build`，智能合约编译成功。
     *   **Commit Message:** `feat(program): 实现基础 NFT 铸造指令 (mint_base_nft)`
@@ -47,7 +38,7 @@
 
 *   **任务 1.3: 实现NFT组合进化指令 (`combine_nfts`)**
     *   **操作:**
-        1.  在 `anchor/programs/artifex/src/lib.rs` 中，定义 `combine_nfts` 指令。
+        1.  在 `anchor/programs/vault/src/lib.rs` 中，定义 `combine_nfts` 指令。
         2.  实现其核心逻辑：验证用户所有权 -> 根据配方验证输入的NFTs -> 通过CPI销毁输入的NFTs -> 通过CPI铸造一个新的进化版NFT。
         3.  配方逻辑可以暂时硬编码在合约中。
     *   **产出:** 在 `anchor` 目录下运行 `anchor build`，智能合约再次编译成功。
