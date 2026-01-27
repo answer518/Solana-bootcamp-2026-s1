@@ -4,10 +4,10 @@ use anchor_lang::system_program::{transfer, Transfer};
 #[cfg(test)]
 mod tests;
 
-declare_id!("Hb7x4FYhr73BddR1i1j1ha26bwHewPMJikeKLoiV5b2b");
+declare_id!("3BR7RdoXueSH1UZAZnqasm94HwdytfKjwSoGLDA1j4dL");
 
 #[program]
-pub mod vault {
+pub mod artifex {
     use super::*;
 
     pub fn deposit(ctx: Context<VaultAction>, amount: u64) -> Result<()> {

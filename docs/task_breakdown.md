@@ -20,106 +20,272 @@
 
 ---
 
-## 阶段 1: 链上程序核心功能开发
+## 阶段 1: 链上程序核心功能开发 (详细分步指南)
 
-**目标:** 完成智能合约的两个核心指令 `mint_base_nft` 和 `combine_nfts`，并编写测试脚本验证其正确性。
+**目标:** 遵循最佳实践，为初级开发者提供一份从零开始、每步可验证的详细指南，完成 `mint_base_nft` 和 `combine_nfts` 两个核心指令的开发与测试。
 
-*   **任务 1.1: 实现基础NFT铸造指令 (`mint_base_nft`)**
-    *   **操作:**
-        1.  在 `anchor/programs/vault/src/lib.rs` 中，定义 `mint_base_nft` 指令的上下文和处理函数。
-        2.  实现通过CPI调用Metaplex Token Metadata程序来创建和铸造一个新NFT的逻辑。URI可以暂时使用一个占位符字符串。
-    *   **产出:** 在 `anchor` 目录下运行 `anchor build`，智能合约编译成功。
-    *   **Commit Message:** `feat(program): 实现基础 NFT 铸造指令 (mint_base_nft)`
+### 子任务 1.1: 清理模板并重命名程序
 
-*   **任务 1.2: 编写 `mint_base_nft` 的测试脚本**
-    *   **操作:** 在 `anchor/tests/` 目录下，修改或创建一个测试脚本，该脚本可以部署合约，并成功调用 `mint_base_nft` 指令。
-    *   **产出:** 在 `anchor` 目录下运行 `anchor test`，测试通过。
-    *   **Commit Message:** `test(program): 添加 mint_base_nft 指令的测试用例`
+**背景:** 官方模板自带一个名为 `vault` 的示例程序，我们需要将其重命名为 `artifex` 并移除无关代码，为项目打下干净的基础。
 
-*   **任务 1.3: 实现NFT组合进化指令 (`combine_nfts`)**
-    *   **操作:**
-        1.  在 `anchor/programs/vault/src/lib.rs` 中，定义 `combine_nfts` 指令。
-        2.  实现其核心逻辑：验证用户所有权 -> 根据配方验证输入的NFTs -> 通过CPI销毁输入的NFTs -> 通过CPI铸造一个新的进化版NFT。
-        3.  配方逻辑可以暂时硬编码在合约中。
-    *   **产出:** 在 `anchor` 目录下运行 `anchor build`，智能合约再次编译成功。
-    *   **Commit Message:** `feat(program): 实现 NFT 组合进化指令 (combine_nfts)`
+*   **子任务 1.1.1: 重命名程序目录和配置**
+    *   **操作步骤:**
+        1.  **重命名目录:** 将 `finalProject/anchor/programs/vault` 目录重命名为 `finalProject/anchor/programs/artifex`。
+        2.  **更新 `Anchor.toml`:** 打开 `finalProject/anchor/Anchor.toml` 文件，找到 `[programs.localnet]` 部分，将其下的 `vault = "..."` 修改为 `artifex = "7EgQFbJSfXmk6QvArnGTHjQGaKotSWNs7o8DTZ1KVxEJ"` (这里的 Program ID 只是一个占位符，后续会被自动更新)。
+        3.  **更新 `lib.rs`:** 打开 `finalProject/anchor/programs/artifex/src/lib.rs` 文件，将 `pub mod vault` 修改为 `pub mod artifex`。
+        4.  **更新 `Cargo.toml`:** 打开 `finalProject/anchor/programs/artifex/Cargo.toml` 文件，将 `[package]` 下的 `name = "vault"` 修改为 `name = "artifex"`，并将 `[lib]` 下的 `name = "vault"` 修改为 `name = "artifex"`。
+    *   **验证方法:** 在 `finalProject/anchor` 目录下运行 `anchor build`。命令应该能成功执行，并在 `target/idl/` 目录下生成 `artifex.json` 文件。
+    *   **注意事项:** 确保以上四个位置全部修改，否则 `anchor build` 会因找不到程序或配置不匹配而失败。
 
-*   **任务 1.4: 编写 `combine_nfts` 的测试脚本**
-    *   **操作:** 在 `anchor/tests/` 目录下，编写一个测试脚本，模拟完整流程：先铸造两个“材料”NFT，然后调用 `combine_nfts` 将它们销毁，并生成一个新的“进化”NFT。
-    *   **产出:** 在 `anchor` 目录下运行 `anchor test`，测试通过。
-    *   **Commit Message:** `test(program): 添加 combine_nfts 指令的端到端测试`
+### 子任务 1.2: 添加 Metaplex 依赖
+
+**背景:** 要创建符合 Metaplex 标准的 NFT，我们必须在项目中引入官方的 `mpl-token-metadata` 库。
+
+*   **子任务 1.2.1: 在 `Cargo.toml` 中添加依赖**
+    *   **操作步骤:**
+        1.  打开 `finalProject/anchor/programs/artifex/Cargo.toml` 文件。
+        2.  在 `[dependencies]` 下添加一行: `mpl-token-metadata = { version = "4.1.2", features = ["no-entrypoint"] }`。
+    *   **验证方法:** 在 `finalProject/anchor` 目录下运行 `anchor build`。
+    *   **注意事项与常见问题:**
+        *   **为什么需要 `features = ["no-entrypoint"]`?** 因为我们只是想通过跨程序调用（CPI）来“调用” Metaplex 程序，而不是要将它作为我们自己程序的一部分来编译。这个特性标志会移除它的入口点，避免编译冲突。
+        *   **坑：依赖版本冲突。** 这是 Solana 开发中最常见的问题。你可能会遇到 `solana-sdk` 或其他库的版本不兼容的错误。
+        *   **解决方案:** 如果遇到版本冲突，最可靠的方法是在 **工作区根目录** 的 `finalProject/anchor/Cargo.toml` 文件中添加 `[patch]` 来强制统一版本。在该文件末尾添加以下内容：
+            ```toml
+            [patch.crates-io]
+            solana-program = { git = "https://github.com/solana-labs/solana", rev = "5db3839" }
+            solana-instruction = { git = "https://github.com/solana-labs/solana", rev = "5db3839" }
+            solana-zk-sdk = { git = "https://github.com/solana-labs/solana", rev = "5db3839" }
+            ```
+            这会告诉 Cargo 在整个工作区都使用指定版本的 Solana 核心库，从而解决冲突。添加后，再次运行 `anchor build`。
+
+### 子任务 1.3: 定义 `mint_base_nft` 的账户上下文 (`Context`)
+
+**背景:** 在实现指令逻辑之前，我们需要使用 Anchor 的 `#[derive(Accounts)]` 宏来精确定义该指令需要哪些账户，并设置约束。
+
+*   **子任务 1.3.1: 编写 `MintBaseNft` 结构体**
+    *   **操作步骤:**
+        1.  打开 `finalProject/anchor/programs/artifex/src/lib.rs`。
+        2.  **删除旧代码:** 删除模板自带的 `deposit`、`withdraw` 函数，以及 `VaultAction` 结构体和 `VaultError` 枚举。
+        3.  **添加 `use` 语句:** 在文件顶部添加与 Token 和 Metadata 相关的 `use` 语句：
+            ```rust
+            use anchor_spl::{
+                associated_token::AssociatedToken,
+                metadata::Metadata,
+                token::{Mint, Token},
+            };
+            ```
+        4.  **定义结构体:** 添加 `MintBaseNft` 结构体，并使用 `#[account(...)]` 宏为每个账户添加约束。
+            ```rust
+            #[derive(Accounts)]
+            pub struct MintBaseNft<'info> {
+                // 用户，交易的发起者和付费者
+                #[account(mut)]
+                pub signer: Signer<'info>,
+
+                // 新 NFT 的 Mint 账户，需要被初始化
+                #[account(
+                    init,
+                    payer = signer,
+                    mint::decimals = 0,
+                    mint::authority = signer,
+                    mint::freeze_authority = signer,
+                )]
+                pub mint: Account<'info, Mint>,
+
+                // 用于接收 NFT 的关联代币账户 (ATA)
+                /// CHECK: ATA an Payer are checked
+                #[account(
+                    init,
+                    payer = signer,
+                    associated_token::mint = mint,
+                    associated_token::authority = signer,
+                )]
+                pub associated_token_account: UncheckedAccount<'info>,
+
+                // Metaplex Metadata 账户地址
+                /// CHECK: This is not dangerous because we don't read or write from this account
+                #[account(
+                    mut,
+                    seeds = [b"metadata", metadata_program.key().as_ref(), mint.key().as_ref()],
+                    bump,
+                )]
+                pub metadata_account: UncheckedAccount<'info>,
+
+                // Metaplex Master Edition 账户地址
+                /// CHECK: This is not dangerous because we don't read or write from this account
+                #[account(
+                    mut,
+                    seeds = [b"metadata", metadata_program.key().as_ref(), mint.key().as_ref(), b"edition"],
+                    bump,
+                )]
+                pub master_edition_account: UncheckedAccount<'info>,
+
+                // 必需的系统程序
+                pub token_program: Program<'info, Token>,
+                pub associated_token_program: Program<'info, AssociatedToken>,
+                pub system_program: Program<'info, System>,
+                pub rent: Sysvar<'info, Rent>,
+                pub metadata_program: Program<'info, Metadata>,
+            }
+            ```
+        5.  **添加占位函数:** 在 `#[program]` 模块中添加一个空的 `mint_base_nft` 函数。
+            ```rust
+            pub fn mint_base_nft(ctx: Context<MintBaseNft>) -> Result<()> {
+                Ok(())
+            }
+            ```
+    *   **验证方法:** 在 `finalProject/anchor` 目录下运行 `anchor build`。如果成功，说明你的账户定义和约束是正确的。
+    *   **注意事项:**
+        *   `/// CHECK:` 注释是必需的，用于告诉 Anchor 你已经手动确认过某些非 `Account` 类型账户的安全性。
+        *   PDA 账户的 `seeds` 必须与 Metaplex 标准完全一致，否则交易会失败。
+
+### 子任务 1.4: 实现 `mint_base_nft` 的核心逻辑
+
+**背景:** 账户结构定义好后，我们将在函数体内编写 CPI 调用，真正地创建 Metaplex NFT。
+
+*   **子任务 1.4.1: 编写 CPI 调用**
+    *   **操作步骤:**
+        1.  打开 `finalProject/anchor/programs/artifex/src/lib.rs`。
+        2.  在 `mint_base_nft` 函数中，添加创建 Metadata 和 Master Edition 的 CPI 调用。
+            ```rust
+            use mpl_token_metadata::pda::{find_master_edition_account, find_metadata_account};
+            use mpl_token_metadata::state::{Collection, Creator, DataV2};
+            // ... in mint_base_nft function
+            
+            // 1. 设置账户上下文
+            let cpi_context = CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                anchor_spl::token::MintTo {
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: ctx.accounts.associated_token_account.to_account_info(),
+                    authority: ctx.accounts.signer.to_account_info(),
+                },
+            );
+
+            // 2. Mint 1个 Token 到 ATA
+            anchor_spl::token::mint_to(cpi_context, 1)?;
+
+            // 3. 创建 Metadata Account
+            let cpi_context_metadata = CpiContext::new(
+                ctx.accounts.metadata_program.to_account_info(),
+                anchor_spl::metadata::CreateMetadataAccountsV3 {
+                    metadata: ctx.accounts.metadata_account.to_account_info(),
+                    mint: ctx.accounts.mint.to_account_info(),
+                    mint_authority: ctx.accounts.signer.to_account_info(),
+                    payer: ctx.accounts.signer.to_account_info(),
+                    update_authority: ctx.accounts.signer.to_account_info(),
+                    system_program: ctx.accounts.system_program.to_account_info(),
+                    rent: ctx.accounts.rent.to_account_info(),
+                },
+            );
+            
+            let data_v2 = DataV2 {
+                name: "Artifex NFT".to_string(), // 示例名称
+                symbol: "ARTFX".to_string(),    // 示例符号
+                uri: "http://example.com/1.json".to_string(), // 示例 URI
+                seller_fee_basis_points: 500, // 5%
+                creators: Some(vec![Creator {
+                    address: ctx.accounts.signer.key(),
+                    verified: true,
+                    share: 100,
+                }]),
+                collection: None,
+                uses: None,
+            };
+
+            anchor_spl::metadata::create_metadata_accounts_v3(cpi_context_metadata, data_v2, false, true, None)?;
+
+            // 4. 创建 Master Edition Account
+            let cpi_context_master_edition = CpiContext::new(
+                ctx.accounts.metadata_program.to_account_info(),
+                anchor_spl::metadata::CreateMasterEditionV3 {
+                    edition: ctx.accounts.master_edition_account.to_account_info(),
+                    mint: ctx.accounts.mint.to_account_info(),
+                    update_authority: ctx.accounts.signer.to_account_info(),
+                    mint_authority: ctx.accounts.signer.to_account_info(),
+                    payer: ctx.accounts.signer.to_account_info(),
+                    metadata: ctx.accounts.metadata_account.to_account_info(),
+                    token_program: ctx.accounts.token_program.to_account_info(),
+                    system_program: ctx.accounts.system_program.to_account_info(),
+                    rent: ctx.accounts.rent.to_account_info(),
+                },
+            );
+
+            anchor_spl::metadata::create_master_edition_v3(cpi_context_master_edition, Some(0))?;
+
+            Ok(())
+            ```
+    *   **验证方法:** 再次运行 `anchor build`。确保所有逻辑和账户引用都正确无误。
+    *   **注意事项:**
+        *   CPI 的账户结构 `CreateMetadataAccountsV3` 和 `CreateMasterEditionV3` 必须与 `anchor-spl` 库中的定义完全一致。
+        *   `DataV2` 结构体中的 `name`, `symbol`, `uri` 等字段将在前端调用时作为参数传入，这里暂时使用硬编码的占位符。
+
+### 子任务 1.5: 编写并运行 `mint_base_nft` 的测试
+
+**背景:** 链上逻辑完成后，我们需要在模拟环境中验证它是否能按预期工作。
+
+*   **子任务 1.5.1: 编写 TypeScript 测试脚本**
+    *   **操作步骤:**
+        1.  打开 `finalProject/anchor/tests/artifex.ts` (如果不存在，可以复制 `vault.ts` 并重命名)。
+        2.  **清理旧测试:** 删除所有与 `vault` 相关的测试代码。
+        3.  **编写新测试:** 添加一个 `it('Should mint a base NFT!', async () => { ... });` 测试用例。
+        4.  **实现测试逻辑:**
+            ```typescript
+            import * as anchor from "@coral-xyz/anchor";
+            import { Program } from "@coral-xyz/anchor";
+            import { Artifex } from "../target/types/artifex";
+            import { PublicKey } from "@solana/web3.js";
+
+            describe("artifex", () => {
+              const provider = anchor.AnchorProvider.env();
+              anchor.setProvider(provider);
+              const program = anchor.workspace.Artifex as Program<Artifex>;
+              const signer = provider.wallet as anchor.Wallet;
+
+              it("Should mint a base NFT!", async () => {
+                const mint = anchor.web3.Keypair.generate();
+
+                // 派生 PDA 地址
+                const [metadataAddress] = PublicKey.findProgramAddressSync(
+                  [
+                    Buffer.from("metadata"),
+                    new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s").toBuffer(),
+                    mint.publicKey.toBuffer(),
+                  ],
+                  new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
+                );
+                const [masterEditionAddress] = PublicKey.findProgramAddressSync(
+                  [
+                    Buffer.from("metadata"),
+                    new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s").toBuffer(),
+                    mint.publicKey.toBuffer(),
+                    Buffer.from("edition"),
+                  ],
+                  new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
+                );
+
+                // 调用链上方法
+                await program.methods
+                  .mintBaseNft()
+                  .accounts({
+                    mint: mint.publicKey,
+                    signer: signer.publicKey,
+                    metadataAccount: metadataAddress,
+                    masterEditionAccount: masterEditionAddress,
+                    // 其他账户 Anchor 会自动推断
+                  })
+                  .signers([mint])
+                  .rpc();
+                
+                console.log("Mint successful!");
+              });
+            });
+            ```
+    *   **验证方法:** 在 `finalProject/anchor` 目录下运行 `anchor test`。如果看到 "Mint successful!" 并且没有错误，说明测试通过。
+    *   **注意事项:**
+        *   **PDA 地址派生:** 在客户端派生 PDA 地址的逻辑必须和链上 `seeds` 完全一致，包括 `metadata_program` 的地址 (`metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s`)。这是最常见的错误来源。
+        *   **Signers:** 因为 `mint` 是一个新生成的 `Keypair`，它需要作为签名者加入到交易中。
 
 ---
 
-## 阶段 2: 前端DApp基础功能搭建
-
-**目标:** 搭建DApp的基础UI，实现钱包连接和NFT数据显示。
-
-*   **任务 2.1: 搭建基础布局与钱包连接**
-    *   **操作:**
-        1.  在 `app/components/` 目录下创建 `layout` 文件夹，并添加 `Navbar.tsx` 组件。
-        2.  在 `app/layout.tsx` 中应用 `Navbar` 和项目已有的 `WalletProvider`。
-        3.  在 `Navbar` 中添加 `@solana/wallet-adapter-react-ui` 提供的 `WalletMultiButton` 组件。
-    *   **产出:** 启动前端应用 (`npm run dev`)，页面显示导航栏，用户可以点击按钮成功连接和断开Solana钱包。
-    *   **Commit Message:** `feat(app): 搭建基础布局并集成钱包连接功能`
-
-*   **任务 2.2: 创建“我的藏品”页面 (`/collection`)**
-    *   **操作:**
-        1.  创建 `app/collection/page.tsx` 路由。
-        2.  在该页面中，获取已连接钱包的公钥，使用 `@solana/web3.js` 的 `getParsedTokenAccountsByOwner` 获取用户代币账户。
-        3.  安装 `@metaplex-foundation/js` 依赖，用于读取并解析每个NFT的链上元数据。
-        4.  将获取到的NFT图片和名称以网格布局的形式展示出来。
-    *   **产出:** 当用户连接钱包后，访问 `/collection` 页面可以看到其钱包中拥有的NFT列表。
-    *   **Commit Message:** `feat(app): 创建“我的藏品”页面，实现 NFT 数据获取与展示`
-
----
-
-## 阶段 3: 核心业务功能端到端集成
-
-**目标:** 将前后端连接起来，实现完整的铸造和组合进化流程。
-
-*   **任务 3.1: 实现“铸造”页面 (`/mint`)**
-    *   **操作:**
-        1.  创建 `app/mint/page.tsx` 路由。
-        2.  在 `finalProject` 根目录运行 `npm run setup` 确保前端拥有最新的合约客户端。
-        3.  在页面上添加“Mint NFT”按钮，点击时，使用 `app/generated/artifex` 中自动生成的客户端调用链上程序的 `mint_base_nft` 指令。
-    *   **产出:** 在本地启动 `solana-test-validator` 后，用户可以在 `/mint` 页面成功铸造一个NFT，并能在 `/collection` 页面立即看到它。
-    *   **Commit Message:** `feat(app): 实现铸造页面，完成前后端铸造流程集成`
-
-*   **任务 3.2: 实现“组合进化”页面 (`/combine`)**
-    *   **操作:**
-        1.  创建 `app/combine/page.tsx` 路由。
-        2.  UI上创建“材料选择区”，展示用户拥有的、可用于合成的基础款NFT。
-        3.  添加“Combine”按钮，当用户选择有效组合后，调用 `app/generated/artifex` 客户端中的 `combine_nfts` 指令。
-    *   **产出:** 用户可以在 `/combine` 页面选择NFT执行组合操作，旧NFT消失，新的进化版NFT出现在 `/collection` 页面。**这是项目的核心亮点演示。**
-    *   **Commit Message:** `feat(app): 实现组合进化页面，完成核心玩法端到端集成`
-
----
-
-## 阶段 4: 部署与最终完善
-
-**目标:** 将项目部署到公开可访问的开发网，并完成最终的文档。
-
-*   **任务 4.1: 准备并上传最终的NFT资产**
-    *   **操作:**
-        1.  创建最终版的NFT图片及JSON元数据文件。
-        2.  使用 `bundlr-cli` 上传到Arweave。
-        3.  将获得的URI更新到链上程序的相应位置。
-    *   **产出:** DApp中展示的NFT拥有了最终的、永久存储的艺术形象和属性。
-    *   **Commit Message:** `chore: 准备并上传最终 NFT 资产至 Arweave`
-
-*   **任务 4.2: 部署到Devnet**
-    *   **操作:**
-        1.  在 `anchor` 目录下运行 `anchor deploy --provider devnet` 部署合约。
-        2.  运行 `anchor keys sync` 将新的Program ID同步到 `Anchor.toml`。
-        3.  在 `finalProject` 根目录运行 `npm run setup`，用新的Program ID重新生成客户端。
-        4.  将 `finalProject` 应用部署到Vercel。
-    *   **产出:** 整个DApp在Devnet上运行，并可通过一个公开的Vercel URL进行访问和测试。
-    *   **Commit Message:** `chore: 部署合约与应用至 Devnet`
-
-*   **任务 4.3: 最终文档与演示**
-    *   **操作:**
-        1.  录制一个简短的项目功能演示视频。
-        2.  更新 `finalProject/demo.md` 文件，填入项目Repo地址、Vercel演示地址和视频链接。
-    *   **产出:** 项目完全准备就绪，可以提交。
-    *   **Commit Message:** `docs: 更新最终文档并添加项目演示`
+*（后续 `combine_nfts` 的详细步骤将遵循类似模式：定义Context -> 实现逻辑 -> 编写测试。这部分可以在完成 `mint_base_nft` 后继续添加。）*

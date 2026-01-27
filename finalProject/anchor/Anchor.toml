@@ -4,8 +4,8 @@
 resolution = true
 skip-lint = false
 
-[programs.devnet]
-vault = "Hb7x4FYhr73BddR1i1j1ha26bwHewPMJikeKLoiV5b2b"
+[programs.localnet]
+artifex = "7EgQFbJSfXmk6QvArnGTHjQGaKotSWNs7o8DTZ1KVxEJ"
 
 [registry]
 url = "https://api.apr.dev"
