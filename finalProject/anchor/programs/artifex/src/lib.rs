@@ -1,8 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_lang::system_program::{transfer, Transfer};
 
-#[cfg(test)]
-mod tests;
 
 declare_id!("3BR7RdoXueSH1UZAZnqasm94HwdytfKjwSoGLDA1j4dL");
 

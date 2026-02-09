@@ -1,113 +1,38 @@
-# nextjs-anchor
+# Artifex - 您的数字潮玩藏品架
 
-Next.js starter with Tailwind CSS, `@solana/react-hooks`, and an Anchor vault program example.
+打造一个连接实体潮玩与数字世界的“Phygital” (物理+数字) 平台。我们不仅仅是发行NFT，更是为每一个实体潮玩创造一个独一无二的、可验证的、可交互的“数字孪生”。
 
-## Getting Started
+重新定义Z世代的收藏文化，让NFT成为潮玩IP生态的核心凭证，为收藏家提供前所未有的虚实互动体验。
 
-```shell
-npx -y create-solana-dapp@latest -t solana-foundation/templates/kit/nextjs-anchor
-```
+## 🛠️ 技术栈
 
-```shell
-npm install   # Builds program and generates client automatically
-npm run dev
-```
+- 智能合约：Rust + Anchor Framework
+- 前端：Next.js + TypeScript + Tailwind CSS +  Wallet Adapter
+- 工具：Solana CLI, @solana/web3.js
 
-Open [http://localhost:3000](http://localhost:3000), connect your wallet, and interact with the vault on devnet.
+## 💡 核心功能
 
-## What's Included
+ **“虚实结合”的落地应用 (Phygital Utility):** 这是我们区别于普通PFP项目的核心。我们将重点阐述NFT的“凭证”功能。例如：
+    *   **未来兑换权:** 持有特定稀有度NFT的用户，未来将有权以优惠价或免费兑换对应的限量版实体玩具。
+    *   **活动入场券:** NFT可以作为未来线下潮玩展、设计师见面会等活动的独家入场券。
+    *   **在路演中，这将是一个非常有吸引力的故事，展示了Web3如何赋能实体经济。**
+*   **可组合与进化的NFT (Composable & Evolvable NFTs) (延伸目标):**
+    *   如果时间允许，可以设计一个简单的“合成/升级”玩法。例如，集齐“角色A”、“滑板”和“帽子”三款NFT的用户，可以销毁它们，合成一个更稀有的、动态的“玩滑板的A”全新NFT。这极大地增加了项目的趣味性、消耗了市场流通量，并鼓励社区成员之间的交易与互动。
 
-- **Wallet connection** via `@solana/react-hooks` with auto-discovery
-- **SOL Vault program** - deposit and withdraw SOL from a personal PDA vault
-- **Codama-generated client** - type-safe program interactions using `@solana/kit`
-- **Tailwind CSS v4** with light/dark mode
+## 🎬 Demo 演示
 
-## Stack
+### 演示链接
+- 🎥 视频演示：https://youtube.com/xxx 或 https://bilibili.com/xxx
+- 🌐 在线 Demo(如有)：https://your-project.vercel.app
 
-| Layer          | Technology                              |
-| -------------- | --------------------------------------- |
-| Frontend       | Next.js 16, React 19, TypeScript        |
-| Styling        | Tailwind CSS v4                         |
-| Solana Client  | `@solana/client`, `@solana/react-hooks` |
-| Program Client | Codama-generated, `@solana/kit`         |
-| Program        | Anchor (Rust)                           |
+### 功能截图
 
-## Project Structure
 
-```
-├── app/
-│   ├── components/
-│   │   ├── providers.tsx      # Solana client setup
-│   │   └── vault-card.tsx     # Vault deposit/withdraw UI
-│   ├── generated/vault/       # Codama-generated program client
-│   └── page.tsx               # Main page
-├── anchor/                    # Anchor workspace
-│   └── programs/vault/        # Vault program (Rust)
-└── codama.json                # Codama client generation config
-```
+## ✍️ 项目创作者：
 
-## Deploy Your Own Vault
-
-The included vault program is already deployed to devnet. To deploy your own:
-
-### Prerequisites
-
-- [Rust](https://rustup.rs/)
-- [Solana CLI](https://solana.com/docs/intro/installation)
-- [Anchor](https://www.anchor-lang.com/docs/installation)
-
-### Steps
-
-1. **Configure Solana CLI for devnet**
-
-   ```bash
-   solana config set --url devnet
-   ```
-
-2. **Create a wallet (if needed) and fund it**
-
-   ```bash
-   solana-keygen new
-   solana airdrop 2
-   ```
-
-3. **Build and deploy the program**
-
-   ```bash
-   cd anchor
-   anchor build
-   anchor keys sync    # Updates program ID in source
-   anchor build        # Rebuild with new ID
-   anchor deploy
-   cd ..
-   ```
-
-4. **Regenerate the client and restart**
-   ```bash
-   npm run setup   # Rebuilds program and regenerates client
-   npm run dev
-   ```
-
-## Testing
-
-Tests use [LiteSVM](https://github.com/LiteSVM/litesvm), a fast lightweight Solana VM for testing.
-
-```bash
-npm run anchor-build   # Build the program first
-npm run anchor-test    # Run tests
-```
-
-The tests are in `anchor/programs/vault/src/tests.rs` and automatically use the program ID from `declare_id!`.
-
-## Regenerating the Client
-
-If you modify the program, regenerate the TypeScript client:
-
-```bash
-npm run setup   # Or: npm run anchor-build && npm run codama:js
-```
-
-This uses [Codama](https://github.com/codama-idl/codama) to generate a type-safe client from the Anchor IDL.
+1. 创作者昵称 xxx
+2. 创作者联系方式 Answer_518/iamnabob@gmail.com
+3. 创作者 Solana USDC 钱包地址 26mAe3xyNZ5X2gQox59zjhfAJk78XdxK3WRY69Pus56G
 
 ## Learn More
 

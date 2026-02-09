@@ -1,6 +1,6 @@
 # Artifex 项目任务拆分计划 (Monorepo 版本)
 
-本文档为“Artifex”项目提供了一个详细的、分步执行的开发计划。此版本基于 `solana-foundation/templates/kit/nextjs-anchor` 的单体仓库（Monorepo）最佳实践进行设计，确保开发流程的高效、自动化和可维护性。
+本文档为“Artifex”项目提供了一个详细的、分步执行的开发计划。此版本基于 `https://github.com/solana-foundation/templates/tree/main/community/phantom-embedded-react` 的单体仓库（Monorepo）最佳实践进行设计，确保开发流程的高效、自动化和可维护性。
 
 ---
 
@@ -45,18 +45,7 @@
     *   **操作步骤:**
         1.  打开 `finalProject/anchor/programs/artifex/Cargo.toml` 文件。
         2.  在 `[dependencies]` 下添加一行: `mpl-token-metadata = { version = "4.1.2", features = ["no-entrypoint"] }`。
-    *   **验证方法:** 在 `finalProject/anchor` 目录下运行 `anchor build`。
-    *   **注意事项与常见问题:**
-        *   **为什么需要 `features = ["no-entrypoint"]`?** 因为我们只是想通过跨程序调用（CPI）来“调用” Metaplex 程序，而不是要将它作为我们自己程序的一部分来编译。这个特性标志会移除它的入口点，避免编译冲突。
-        *   **坑：依赖版本冲突。** 这是 Solana 开发中最常见的问题。你可能会遇到 `solana-sdk` 或其他库的版本不兼容的错误。
-        *   **解决方案:** 如果遇到版本冲突，最可靠的方法是在 **工作区根目录** 的 `finalProject/anchor/Cargo.toml` 文件中添加 `[patch]` 来强制统一版本。在该文件末尾添加以下内容：
-            ```toml
-            [patch.crates-io]
-            solana-program = { git = "https://github.com/solana-labs/solana", rev = "5db3839" }
-            solana-instruction = { git = "https://github.com/solana-labs/solana", rev = "5db3839" }
-            solana-zk-sdk = { git = "https://github.com/solana-labs/solana", rev = "5db3839" }
-            ```
-            这会告诉 Cargo 在整个工作区都使用指定版本的 Solana 核心库，从而解决冲突。添加后，再次运行 `anchor build`。
+    *   **验证方法:** 在 `finalProject/anchor` 目录下运行 `anchor build`。命令应该能成功执行，并在 `target/idl/` 目录下生成 `artifex.json` 文件。
 
 ### 子任务 1.3: 定义 `mint_base_nft` 的账户上下文 (`Context`)
 
@@ -288,4 +277,328 @@
 
 ---
 
-*（后续 `combine_nfts` 的详细步骤将遵循类似模式：定义Context -> 实现逻辑 -> 编写测试。这部分可以在完成 `mint_base_nft` 后继续添加。）*
+---
+
+### 子任务 1.6: 定义 `combine_nfts` 的账户上下文 (`Context`)
+
+**背景:** 现在我们来实现核心的合成功能。此指令将接收两个基础 NFT，销毁它们，并创建一个新的、代表“合成品”的 NFT。首先，我们需要定义这个复杂操作所需的所有账户。
+
+*   **子任务 1.6.1: 编写 `CombineNfts` 结构体**
+    *   **操作步骤:**
+        1.  打开 `finalProject/anchor/programs/artifex/src/lib.rs`。
+        2.  在 `MintBaseNft` 结构体下方，添加 `CombineNfts` 结构体。为了清晰起见，我们将明确定义销毁两个基础 NFT 并铸造一个新 NFT 所需的所有账户。
+            ```rust
+            #[derive(Accounts)]
+            pub struct CombineNfts<'info> {
+                // 用户，交易的发起者和付费者
+                #[account(mut)]
+                pub signer: Signer<'info>,
+
+                // --- 要销毁的第一个基础 NFT ---
+                #[account(mut)]
+                pub base_nft_1_mint: Account<'info, Mint>,
+                #[account(
+                    mut,
+                    associated_token::mint = base_nft_1_mint,
+                    associated_token::authority = signer,
+                )]
+                pub base_nft_1_ata: Account<'info, TokenAccount>,
+                /// CHECK: Checked by metaplex program
+                #[account(mut)]
+                pub base_nft_1_metadata: UncheckedAccount<'info>,
+                /// CHECK: Checked by metaplex program
+                #[account(mut)]
+                pub base_nft_1_edition: UncheckedAccount<'info>,
+
+                // --- 要销毁的第二个基础 NFT ---
+                #[account(mut)]
+                pub base_nft_2_mint: Account<'info, Mint>,
+                #[account(
+                    mut,
+                    associated_token::mint = base_nft_2_mint,
+                    associated_token::authority = signer,
+                )]
+                pub base_nft_2_ata: Account<'info, TokenAccount>,
+                /// CHECK: Checked by metaplex program
+                #[account(mut)]
+                pub base_nft_2_metadata: UncheckedAccount<'info>,
+                /// CHECK: Checked by metaplex program
+                #[account(mut)]
+                pub base_nft_2_edition: UncheckedAccount<'info>,
+
+                // --- 新创建的合成 NFT ---
+                #[account(
+                    init,
+                    payer = signer,
+                    mint::decimals = 0,
+                    mint::authority = signer,
+                    mint::freeze_authority = signer,
+                )]
+                pub combined_nft_mint: Account<'info, Mint>,
+                #[account(
+                    init,
+                    payer = signer,
+                    associated_token::mint = combined_nft_mint,
+                    associated_token::authority = signer,
+                )]
+                pub combined_nft_ata: Account<'info, TokenAccount>,
+                /// CHECK: Checked by metaplex program
+                #[account(
+                    mut,
+                    seeds = [b"metadata", metadata_program.key().as_ref(), combined_nft_mint.key().as_ref()],
+                    bump,
+                )]
+                pub combined_nft_metadata: UncheckedAccount<'info>,
+                /// CHECK: Checked by metaplex program
+                #[account(
+                    mut,
+                    seeds = [b"metadata", metadata_program.key().as_ref(), combined_nft_mint.key().as_ref(), b"edition"],
+                    bump,
+                )]
+                pub combined_nft_edition: UncheckedAccount<'info>,
+
+                // --- 系统程序 ---
+                pub token_program: Program<'info, Token>,
+                pub associated_token_program: Program<'info, AssociatedToken>,
+                pub system_program: Program<'info, System>,
+                pub rent: Sysvar<'info, Rent>,
+                pub metadata_program: Program<'info, Metadata>,
+            }
+            ```
+        3.  **添加占位函数:** 在 `#[program]` 模块中添加一个空的 `combine_nfts` 函数。
+            ```rust
+            pub fn combine_nfts(ctx: Context<CombineNfts>) -> Result<()> {
+                Ok(())
+            }
+            ```
+    *   **验证方法:** 在 `finalProject/anchor` 目录下运行 `anchor build`。如果成功，说明账户定义是正确的。
+    *   **注意事项:**
+        *   这个结构体非常大，因为它需要处理三个 NFT（两个旧的，一个新的）的所有相关账户。
+        *   对于要销毁的 NFT，我们需要 `mut` 权限，因为我们将要修改它们（销毁 Token，关闭账户）。
+        *   `TokenAccount` 类型比 `UncheckedAccount` 更安全，因为它会自动反序列化并检查所有权。我们在这里用于 ATA。
+
+### 子任务 1.7: 实现 `combine_nfts` 的核心逻辑
+
+**背景:** 账户结构定义完毕，现在我们来编写销毁和铸造的逻辑。我们将使用 Metaplex 的 `burn_nft` 和我们之前创建的铸造逻辑。
+
+*   **子任务 1.7.1: 编写销毁与铸造的 CPI 调用**
+    *   **操作步骤:**
+        1.  打开 `finalProject/anchor/programs/artifex/src/lib.rs`。
+        2.  在 `combine_nfts` 函数中，添加销毁两个基础 NFT、然后铸造一个新的合成 NFT 的逻辑。
+            ```rust
+            // ... in combine_nfts function
+
+            // 1. 销毁第一个 NFT
+            msg!("Burning Base NFT #1");
+            let cpi_burn_accounts_1 = Burn {
+                mint: ctx.accounts.base_nft_1_mint.to_account_info(),
+                from: ctx.accounts.base_nft_1_ata.to_account_info(),
+                authority: ctx.accounts.signer.to_account_info(),
+            };
+            let cpi_burn_context_1 = CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_burn_accounts_1);
+            anchor_spl::token::burn(cpi_burn_context_1, 1)?;
+
+            // (可选但推荐) 关闭第一个 NFT 的 ATA 账户，将租金返还给用户
+            let cpi_close_accounts_1 = CloseAccount {
+                account: ctx.accounts.base_nft_1_ata.to_account_info(),
+                destination: ctx.accounts.signer.to_account_info(),
+                authority: ctx.accounts.signer.to_account_info(),
+            };
+            let cpi_close_context_1 = CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_close_accounts_1);
+            anchor_spl::token::close_account(cpi_close_context_1)?;
+
+            // 2. 销毁第二个 NFT
+            msg!("Burning Base NFT #2");
+            let cpi_burn_accounts_2 = Burn {
+                mint: ctx.accounts.base_nft_2_mint.to_account_info(),
+                from: ctx.accounts.base_nft_2_ata.to_account_info(),
+                authority: ctx.accounts.signer.to_account_info(),
+            };
+            let cpi_burn_context_2 = CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_burn_accounts_2);
+            anchor_spl::token::burn(cpi_burn_context_2, 1)?;
+
+            // (可选但推荐) 关闭第二个 NFT 的 ATA 账户
+            let cpi_close_accounts_2 = CloseAccount {
+                account: ctx.accounts.base_nft_2_ata.to_account_info(),
+                destination: ctx.accounts.signer.to_account_info(),
+                authority: ctx.accounts.signer.to_account_info(),
+            };
+            let cpi_close_context_2 = CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_close_accounts_2);
+            anchor_spl::token::close_account(cpi_close_context_2)?;
+
+            // 3. 铸造新的合成 NFT (逻辑与 mint_base_nft 类似)
+            msg!("Minting Combined NFT");
+            // 3.1 Mint 1个 Token 到新的 ATA
+            let cpi_mint_context = CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                anchor_spl::token::MintTo {
+                    mint: ctx.accounts.combined_nft_mint.to_account_info(),
+                    to: ctx.accounts.combined_nft_ata.to_account_info(),
+                    authority: ctx.accounts.signer.to_account_info(),
+                },
+            );
+            anchor_spl::token::mint_to(cpi_mint_context, 1)?;
+
+            // 3.2 创建 Metadata Account
+            let cpi_metadata_context = CpiContext::new(
+                ctx.accounts.metadata_program.to_account_info(),
+                anchor_spl::metadata::CreateMetadataAccountsV3 {
+                    metadata: ctx.accounts.combined_nft_metadata.to_account_info(),
+                    mint: ctx.accounts.combined_nft_mint.to_account_info(),
+                    mint_authority: ctx.accounts.signer.to_account_info(),
+                    payer: ctx.accounts.signer.to_account_info(),
+                    update_authority: ctx.accounts.signer.to_account_info(),
+                    system_program: ctx.accounts.system_program.to_account_info(),
+                    rent: ctx.accounts.rent.to_account_info(),
+                },
+            );
+            let data_v2 = DataV2 {
+                name: "Combined Artifex NFT".to_string(),
+                symbol: "C-ARTFX".to_string(),
+                uri: "http://example.com/combined.json".to_string(),
+                seller_fee_basis_points: 500,
+                creators: Some(vec![Creator {
+                    address: ctx.accounts.signer.key(),
+                    verified: true,
+                    share: 100,
+                }]),
+                collection: None,
+                uses: None,
+            };
+            anchor_spl::metadata::create_metadata_accounts_v3(cpi_metadata_context, data_v2, false, true, None)?;
+
+            // 3.3 创建 Master Edition Account
+            let cpi_master_edition_context = CpiContext::new(
+                ctx.accounts.metadata_program.to_account_info(),
+                anchor_spl::metadata::CreateMasterEditionV3 {
+                    edition: ctx.accounts.combined_nft_edition.to_account_info(),
+                    mint: ctx.accounts.combined_nft_mint.to_account_info(),
+                    update_authority: ctx.accounts.signer.to_account_info(),
+                    mint_authority: ctx.accounts.signer.to_account_info(),
+                    payer: ctx.accounts.signer.to_account_info(),
+                    metadata: ctx.accounts.combined_nft_metadata.to_account_info(),
+                    token_program: ctx.accounts.token_program.to_account_info(),
+                    system_program: ctx.accounts.system_program.to_account_info(),
+                    rent: ctx.accounts.rent.to_account_info(),
+                },
+            );
+            anchor_spl::metadata::create_master_edition_v3(cpi_master_edition_context, Some(0))?;
+
+            msg!("Combine operation successful!");
+            Ok(())
+            ```
+    *   **验证方法:** 再次运行 `anchor build`。确保所有逻辑都已正确添加。
+    *   **注意事项:**
+        *   你需要从 `anchor_spl::token` 导入 `Burn` 和 `CloseAccount` 结构体。
+        *   销毁 NFT 实际上是销毁其代币（Token）。一旦代币数量变为 0，与之关联的 ATA 就可以安全地关闭，以回收租金。
+        *   Metaplex 的 `burn_nft` 指令更为复杂，它会同时处理 Token、Metadata 和 Edition 账户。但为了教学目的，手动 `burn` 和 `close_account` 更能清晰地展示底层原理。
+
+### 子任务 1.8: 编写并运行 `combine_nfts` 的测试
+
+**背景:** 这是最关键的验证步骤。我们需要编写一个测试，模拟用户的完整流程：铸造两个基础 NFT，然后调用合成指令，并验证结果。
+
+*   **子任务 1.8.1: 编写 TypeScript 测试脚本**
+    *   **操作步骤:**
+        1.  打开 `finalProject/anchor/tests/artifex.ts`。
+        2.  在 `describe` 块内，添加一个新的 `it('Should combine two NFTs!', async () => { ... });` 测试用例。
+        3.  **实现测试逻辑:**
+            ```typescript
+            import { getAssociatedTokenAddress } from "@solana/spl-token";
+            // ... other imports
+
+            it("Should combine two NFTs!", async () => {
+                // --- Helper function to mint a base NFT ---
+                const mintBaseNft = async () => {
+                    const mint = anchor.web3.Keypair.generate();
+                    const associatedTokenAccount = await getAssociatedTokenAddress(mint.publicKey, signer.publicKey);
+                    const [metadataAddress] = PublicKey.findProgramAddressSync(
+                        [Buffer.from("metadata"), new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s").toBuffer(), mint.publicKey.toBuffer()],
+                        new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
+                    );
+                    const [masterEditionAddress] = PublicKey.findProgramAddressSync(
+                        [Buffer.from("metadata"), new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s").toBuffer(), mint.publicKey.toBuffer(), Buffer.from("edition")],
+                        new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
+                    );
+
+                    await program.methods
+                        .mintBaseNft()
+                        .accounts({
+                            mint: mint.publicKey,
+                            signer: signer.publicKey,
+                            associatedTokenAccount: associatedTokenAccount,
+                            metadataAccount: metadataAddress,
+                            masterEditionAccount: masterEditionAddress,
+                        })
+                        .signers([mint])
+                        .rpc();
+                    
+                    return { mint, associatedTokenAccount, metadataAddress, masterEditionAddress };
+                };
+
+                // 1. 铸造两个基础 NFT
+                console.log("Minting two base NFTs...");
+                const nft1 = await mintBaseNft();
+                const nft2 = await mintBaseNft();
+                console.log("Base NFTs minted.");
+
+                // 2. 准备合成 NFT 的账户
+                const combinedNftMint = anchor.web3.Keypair.generate();
+                const combinedNftAta = await getAssociatedTokenAddress(combinedNftMint.publicKey, signer.publicKey);
+                const [combinedNftMetadata] = PublicKey.findProgramAddressSync(
+                    [Buffer.from("metadata"), new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s").toBuffer(), combinedNftMint.publicKey.toBuffer()],
+                    new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
+                );
+                const [combinedNftEdition] = PublicKey.findProgramAddressSync(
+                    [Buffer.from("metadata"), new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s").toBuffer(), combinedNftMint.publicKey.toBuffer(), Buffer.from("edition")],
+                    new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
+                );
+
+                // 3. 调用合成指令
+                console.log("Combining NFTs...");
+                await program.methods
+                    .combineNfts()
+                    .accounts({
+                        signer: signer.publicKey,
+                        baseNft1Mint: nft1.mint.publicKey,
+                        baseNft1Ata: nft1.associatedTokenAccount,
+                        baseNft1Metadata: nft1.metadataAddress,
+                        baseNft1Edition: nft1.masterEditionAddress,
+                        baseNft2Mint: nft2.mint.publicKey,
+                        baseNft2Ata: nft2.associatedTokenAccount,
+                        baseNft2Metadata: nft2.metadataAddress,
+                        baseNft2Edition: nft2.masterEditionAddress,
+                        combinedNftMint: combinedNftMint.publicKey,
+                        combinedNftAta: combinedNftAta,
+                        combinedNftMetadata: combinedNftMetadata,
+                        combinedNftEdition: combinedNftEdition,
+                        // 其他程序地址 Anchor 会自动推断
+                    })
+                    .signers([combinedNftMint])
+                    .rpc();
+                
+                console.log("Combine successful!");
+
+                // 4. (可选) 验证旧账户是否已被关闭
+                const nft1AtaInfo = await provider.connection.getAccountInfo(nft1.associatedTokenAccount);
+                const nft2AtaInfo = await provider.connection.getAccountInfo(nft2.associatedTokenAccount);
+                
+                if (nft1AtaInfo === null && nft2AtaInfo === null) {
+                    console.log("Old ATAs successfully closed.");
+                } else {
+                    console.error("Old ATAs were not closed.");
+                }
+            });
+            ```
+    *   **验证方法:** 在 `finalProject/anchor` 目录下运行 `anchor test`。你应该会看到所有测试（包括之前的 `mint_base_nft` 测试）都成功通过，并打印出 "Combine successful!" 和 "Old ATAs successfully closed."。
+    *   **注意事项:**
+        *   为了让测试更简洁，我们创建了一个 `mintBaseNft` 辅助函数。
+        *   在调用 `combineNfts` 时，`combinedNftMint` 是新生成的 `Keypair`，因此必须作为签名者传入。
+        *   测试的最后一步通过 `getAccountInfo` 检查旧的 ATA 是否为 `null` 来验证它们是否已被正确关闭。这是一个很好的实践，可以确保我们的程序没有留下“僵尸”账户。
+
+---
+
+## 阶段 2: 前端集成与开发
+
+**目标:** 将链上程序的功能暴露给用户，构建一个允许用户铸造和合成 NFT 的 Web 界面。
+
+*（此阶段的详细步骤将在链上程序完全通过测试后继续补充。）*
